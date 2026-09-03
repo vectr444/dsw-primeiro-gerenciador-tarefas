@@ -5,7 +5,7 @@
   "scripts": {
     "dev": "tsx watch server.ts",
     "start": "tsx server.ts",
-    "build": "tsc "
+    "build": "tsc"
   },
   "dependencies": {
     "@tailwindcss/vite": "^4.3.3",
