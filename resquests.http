@@ -20,3 +20,13 @@ Content-Type: application/json
 {
     "title": "Dormir cedo hoje"
 }
+
+### 31. Teste de Array Injection (A Busca Bizarra)
+# Sem protecao: O JS converte ['a', 'b'] em "a,b" e faz uma busca descontrolada que nao acha nada.
+# Com protecao (Passo 4): O servidor percebe que nao e uma string pura, barra o array e lista as tarefas intencionalmente.
+GET {{baseUrl}}/api/tasks?search=a&search=b
+
+### 32. Teste de Parametro Indefinido (O Acidente)
+# Sem protecao: A variavel search fica undefined, o codigo se perde e lista tudo por acidente.
+# Com protecao (Passo 4): O servidor barra o dado ruim, forca uma string vazia ("") e lista tudo de proposito e com seguranca.
+GET {{baseUrl}}/api/tasks?search[]=a&search[]=b
