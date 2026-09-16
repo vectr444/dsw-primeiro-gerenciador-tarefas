@@ -30,3 +30,24 @@ GET {{baseUrl}}/api/tasks?search=a&search=b
 # Sem protecao: A variavel search fica undefined, o codigo se perde e lista tudo por acidente.
 # Com protecao (Passo 4): O servidor barra o dado ruim, forca uma string vazia ("") e lista tudo de proposito e com seguranca.
 GET {{baseUrl}}/api/tasks?search[]=a&search[]=b
+
+### 33. Quebrando o Type Guard: Titulo numerico (deve retornar 400)
+# O invasor tenta mandar um numero (123) no lugar de uma string.
+# A nossa funcao tituloValido() vai barrar isso gracas a verificacao typeof t === "string".
+POST {{baseUrl}}/api/tasks
+Content-Type: application/json
+
+{
+    "titulo": 123,
+    "prioridade": "high"
+}
+
+### 34. Quebrando a Allowlist: Status nao permitido (deve retornar 400)
+# O invasor tenta inventar um status que nao existe no banco ("cancelled").
+# Nossa rota PATCH verifica a lista STATUS_VALIDOS e barra a acao antes mesmo de abrir a transacao no banco.
+PATCH {{baseUrl}}/api/tasks/1
+Content-Type: application/json
+
+{
+    "status": "cancelled"
+}
