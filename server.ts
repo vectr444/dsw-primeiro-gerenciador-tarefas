@@ -1,8 +1,13 @@
 import express from "express";
 import Database from "better-sqlite3";
+import bcrypt from "bcryptjs";
+import jwt from "jsonwebtoken";
 
 const app = express();
 const PORT = Number(process.env.PORT) || 3000;
+
+// Segredo usado para assinar os tokens JWT
+const JWT_SECRET = process.env.JWT_SECRET || "super_secreto_desenvolvimento";
 
 // 1. Criamos um "molde" (Interface) para nossas tarefas
 interface Tarefa {
@@ -10,6 +15,13 @@ interface Tarefa {
     titulo: string;
     status: string;
     prioridade: string;
+}
+
+// Interface do Usuário
+interface Usuario {
+    id: number;
+    email: string;
+    senha: string;
 }
 
 // 2. Centralizamos as regras. Se a regra mudar, mudamos em um so lugar!
@@ -56,7 +68,7 @@ db.exec(`
 
     CREATE TABLE IF NOT EXISTS usuarios (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
-        email TEXT NOT NULL,
+        email TEXT UNIQUE NOT NULL,
         senha TEXT NOT NULL
     );
 `);
@@ -69,6 +81,10 @@ const stmtBuscarPorTitulo = db.prepare("SELECT * FROM tarefas WHERE titulo LIKE 
 const stmtBuscarPorId = db.prepare("SELECT * FROM tarefas WHERE id = ?");
 const stmtInserirTarefa = db.prepare("INSERT INTO tarefas (titulo, status, prioridade) VALUES (?, 'pending', ?)");
 const stmtDeletarTarefa = db.prepare("DELETE FROM tarefas WHERE id = ?");
+
+// Consultas para autenticação
+const stmtBuscarUsuarioPorId = db.prepare("SELECT * FROM usuarios WHERE id = ?");
+const stmtBuscarUsuarioPorEmail = db.prepare("SELECT * FROM usuarios WHERE email = ?");
 
 // Bom: Tipagem correta sem usar "as any"
 const usuariosExistentes = stmtContarUsuarios.get() as { count: number };
@@ -85,8 +101,53 @@ app.get("/api/health", (req, res) => {
 });
 
 app.get("/api/version", (req, res) => {
-    res.json({ appName: "Gerenciador de Tarefas Multi-Usuário", version: "1.0.0" });
+    res.json({ appName: "Gerenciador de Tarefas Multi-Usuário", version: "2.0.0" });
 });
+
+// === ROTAS DE AUTENTICAÇÃO ===
+
+// Rota de Registro
+app.post("/api/auth/register", (req, res) => {
+    const { email, senha } = req.body;
+    // Validação inicial dos dados
+    if (typeof email !== "string" || typeof senha !== "string") {
+        return res.status(400).json({ error: "E-mail e senha são obrigatórios." });
+    }
+    if (senha.trim().length < 6) {
+        return res.status(400).json({ error: "A senha deve ter ao menos 6 caracteres." });
+    }
+    // Criando a "impressão digital" da senha
+    const hash = bcrypt.hashSync(senha, 10);
+    try {
+        const resultado = stmtInserirUsuario.run(email.trim(), hash);
+        const usuario = stmtBuscarUsuarioPorId.get(resultado.lastInsertRowid) as Usuario;
+        return res.status(201).json({ id: usuario.id, email: usuario.email });
+    } catch {
+        return res.status(409).json({ error: "E-mail já cadastrado." });
+    }
+});
+
+// Rota de Login
+app.post("/api/auth/login", (req, res) => {
+    const { email, senha } = req.body;
+    if (typeof email !== "string" || typeof senha !== "string") {
+        return res.status(400).json({ error: "E-mail e senha são obrigatórios." });
+    }
+    const usuario = stmtBuscarUsuarioPorEmail.get(email.trim()) as Usuario | undefined;
+    // Compara SEMPRE com hash (mesmo se usuário não existir) para evitar vazamento
+    const hashEsperado = usuario?.senha ?? "$2a$10$fakehashparanaquebrarcomparacao";
+    const senhaOk = bcrypt.compareSync(senha, hashEsperado);
+    if (!usuario || !senhaOk) {
+        return res.status(401).json({ error: "Credenciais inválidas." });
+    }
+    // Gerando o "Crachá" de acesso
+    const token = jwt.sign({ id: usuario.id, email: usuario.email }, JWT_SECRET, {
+        expiresIn: "2h",
+    });
+    return res.json({ token });
+});
+
+// === ROTAS DE TAREFAS ===
 
 app.get("/api/tasks", (req, res) => {
     // 1. Coercao Segura: Forcamos a variavel a ser uma String vazia caso tentem nos enviar um Array
