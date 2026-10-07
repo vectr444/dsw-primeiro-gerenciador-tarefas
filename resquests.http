@@ -9,33 +9,45 @@ GET {{baseUrl}}/api/health
 GET {{baseUrl}}/api/version
 
 
-### Listar tarefas
+### Aula 04: as rotas /api/tasks agora exigem token JWT.
+### Faça login (teste 38), copie o token e cole na variável abaixo (sem aspas).
+@token = COLE_SEU_TOKEN_AQUI
+
+### 3. (Protegido) Listar todas as tarefas do usuário logado
+GET {{baseUrl}}/api/tasks
+Authorization: Bearer {{token}}
+
+### 3B. Teste de Segurança: Acessar sem token (deve retornar 401)
 GET {{baseUrl}}/api/tasks
 
-
-### Cadastrar uma tarefa
+### 5. (Protegido) Criar uma nova tarefa
 POST {{baseUrl}}/api/tasks
 Content-Type: application/json
+Authorization: Bearer {{token}}
 
 {
-    "title": "Dormir cedo hoje"
+    "titulo": "Minha Tarefa Isolada",
+    "prioridade": "high"
 }
 
 ### 31. Teste de Array Injection (A Busca Bizarra)
 # Sem protecao: O JS converte ['a', 'b'] em "a,b" e faz uma busca descontrolada que nao acha nada.
 # Com protecao (Passo 4): O servidor percebe que nao e uma string pura, barra o array e lista as tarefas intencionalmente.
 GET {{baseUrl}}/api/tasks?search=a&search=b
+Authorization: Bearer {{token}}
 
 ### 32. Teste de Parametro Indefinido (O Acidente)
 # Sem protecao: A variavel search fica undefined, o codigo se perde e lista tudo por acidente.
 # Com protecao (Passo 4): O servidor barra o dado ruim, forca uma string vazia ("") e lista tudo de proposito e com seguranca.
 GET {{baseUrl}}/api/tasks?search[]=a&search[]=b
+Authorization: Bearer {{token}}
 
 ### 33. Quebrando o Type Guard: Titulo numerico (deve retornar 400)
 # O invasor tenta mandar um numero (123) no lugar de uma string.
 # A nossa funcao tituloValido() vai barrar isso gracas a verificacao typeof t === "string".
 POST {{baseUrl}}/api/tasks
 Content-Type: application/json
+Authorization: Bearer {{token}}
 
 {
     "titulo": 123,
@@ -47,6 +59,7 @@ Content-Type: application/json
 # Nossa rota PATCH verifica a lista STATUS_VALIDOS e barra a acao antes mesmo de abrir a transacao no banco.
 PATCH {{baseUrl}}/api/tasks/1
 Content-Type: application/json
+Authorization: Bearer {{token}}
 
 {
     "status": "cancelled"

@@ -1,4 +1,4 @@
-import express from "express";
+import express, { type Request, type Response, type NextFunction } from "express";
 import Database from "better-sqlite3";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
@@ -24,6 +24,11 @@ interface Usuario {
     senha: string;
 }
 
+// Requisição autenticada: o middleware injeta o ID do usuário após validar o token
+interface AuthRequest extends Request {
+    usuarioId?: number;
+}
+
 // 2. Centralizamos as regras. Se a regra mudar, mudamos em um so lugar!
 const PRIORIDADES = ["low", "medium", "high"] as const;
 const STATUS_VALIDOS = ["pending", "completed"] as const;
@@ -47,10 +52,30 @@ const normalizarStatus = (s: unknown) => {
 };
 
 // 4. Um ajudante so para transformar e validar IDs
-const parsearId = (idParam: string): number | null => {
+const parsearId = (idParam: string | string[]): number | null => {
+    if (typeof idParam !== "string") return null;
     const id = Number(idParam);
     // Number("12abc") vira NaN imediatamente, o que e mais seguro!
     return isNaN(id) ? null : id;
+};
+
+// Middleware de Autenticação: barra quem não tem um token JWT válido
+const authenticate = (req: AuthRequest, res: Response, next: NextFunction) => {
+    const header = req.headers.authorization;
+
+    if (!header || !header.startsWith("Bearer ")) {
+        return res.status(401).json({ error: "Token ausente ou mal formatado." });
+    }
+
+    const token = header.split(" ")[1]; // Pega só o token após a palavra 'Bearer'
+
+    try {
+        const payload = jwt.verify(token, JWT_SECRET) as { id: number };
+        req.usuarioId = payload.id; // Injeta o id no req para a rota usar
+        next(); // Tudo certo! Segue para a rota.
+    } catch {
+        return res.status(401).json({ error: "Token inválido ou expirado." });
+    }
 };
 
 // Middleware para ler o corpo das requisições em formato JSON
@@ -63,7 +88,9 @@ db.exec(`
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         titulo TEXT NOT NULL,
         status TEXT DEFAULT 'pending',
-        prioridade TEXT DEFAULT 'medium'
+        prioridade TEXT DEFAULT 'medium',
+        usuario_id INTEGER NOT NULL,
+        FOREIGN KEY(usuario_id) REFERENCES usuarios(id)
     );
 
     CREATE TABLE IF NOT EXISTS usuarios (
@@ -76,11 +103,11 @@ db.exec(`
 // Escrevemos (compilamos) as buscas UMA UNICA VEZ e guardamos na memoria.
 const stmtContarUsuarios = db.prepare("SELECT COUNT(*) as count FROM usuarios");
 const stmtInserirUsuario = db.prepare("INSERT INTO usuarios (email, senha) VALUES (?, ?)");
-const stmtListarTodas = db.prepare("SELECT * FROM tarefas");
-const stmtBuscarPorTitulo = db.prepare("SELECT * FROM tarefas WHERE titulo LIKE ?");
-const stmtBuscarPorId = db.prepare("SELECT * FROM tarefas WHERE id = ?");
-const stmtInserirTarefa = db.prepare("INSERT INTO tarefas (titulo, status, prioridade) VALUES (?, 'pending', ?)");
-const stmtDeletarTarefa = db.prepare("DELETE FROM tarefas WHERE id = ?");
+const stmtListarTodas = db.prepare("SELECT * FROM tarefas WHERE usuario_id = ?");
+const stmtBuscarPorTitulo = db.prepare("SELECT * FROM tarefas WHERE titulo LIKE ? AND usuario_id = ?");
+const stmtBuscarPorId = db.prepare("SELECT * FROM tarefas WHERE id = ? AND usuario_id = ?");
+const stmtInserirTarefa = db.prepare("INSERT INTO tarefas (titulo, status, prioridade, usuario_id) VALUES (?, 'pending', ?, ?)");
+const stmtDeletarTarefa = db.prepare("DELETE FROM tarefas WHERE id = ? AND usuario_id = ?");
 
 // Consultas para autenticação
 const stmtBuscarUsuarioPorId = db.prepare("SELECT * FROM usuarios WHERE id = ?");
@@ -149,18 +176,20 @@ app.post("/api/auth/login", (req, res) => {
 
 // === ROTAS DE TAREFAS ===
 
-app.get("/api/tasks", (req, res) => {
+app.get("/api/tasks", authenticate, (req: AuthRequest, res) => {
+    const usuarioId = req.usuarioId!; // Garantido pelo middleware authenticate
+
     // 1. Coercao Segura: Forcamos a variavel a ser uma String vazia caso tentem nos enviar um Array
     const search = typeof req.query.search === "string" ? req.query.search : "";
-  
+
     try {
         if (search) {
             // 2. Protecao: O '%' entra DEPOIS, apenas dentro do parametro
-            const tarefas = stmtBuscarPorTitulo.all(`%${search}%`);
+            const tarefas = stmtBuscarPorTitulo.all(`%${search}%`, usuarioId);
             res.json(tarefas);
         } else {
             // 3. Performance: Usamos a busca compilada la do Passo 2
-            const tarefas = stmtListarTodas.all();
+            const tarefas = stmtListarTodas.all(usuarioId);
             res.json(tarefas);
         }
     } catch {
@@ -169,7 +198,8 @@ app.get("/api/tasks", (req, res) => {
     }
 });
 
-app.post("/api/tasks", (req, res) => {
+app.post("/api/tasks", authenticate, (req: AuthRequest, res) => {
+    const usuarioId = req.usuarioId!;
     const { titulo, prioridade } = req.body;
     const prioridadeValida = normalizarPrioridade(prioridade);
 
@@ -181,8 +211,8 @@ app.post("/api/tasks", (req, res) => {
     }
 
     try {
-        const resultado = stmtInserirTarefa.run(titulo.trim(), prioridadeValida);
-        const novaTarefa = stmtBuscarPorId.get(resultado.lastInsertRowid) as Tarefa;
+        const resultado = stmtInserirTarefa.run(titulo.trim(), prioridadeValida, usuarioId);
+        const novaTarefa = stmtBuscarPorId.get(resultado.lastInsertRowid, usuarioId) as Tarefa;
         return res.status(201).json(novaTarefa);
     } catch {
         return res.status(500).json({ error: "Erro ao processar persistência" });
@@ -190,7 +220,8 @@ app.post("/api/tasks", (req, res) => {
 });
 
 // Rota para deletar fisicamente uma tarefa do banco
-app.delete("/api/tasks/:id", (req, res) => {
+app.delete("/api/tasks/:id", authenticate, (req: AuthRequest, res) => {
+    const usuarioId = req.usuarioId!;
     // Validação de ID padronizada (igual PUT/PATCH)
     const idParaDeletar = parsearId(req.params.id);
     if (idParaDeletar === null) {
@@ -198,7 +229,7 @@ app.delete("/api/tasks/:id", (req, res) => {
     }
 
     try {
-        const resultado = stmtDeletarTarefa.run(idParaDeletar);
+        const resultado = stmtDeletarTarefa.run(idParaDeletar, usuarioId);
         if (resultado.changes === 0) {
             return res.status(404).json({ error: "Tarefa não localizada para exclusão." });
         }
@@ -209,7 +240,8 @@ app.delete("/api/tasks/:id", (req, res) => {
 });
 
 // A Rota PUT atualiza uma tarefa existente no SQLite com validações estritas
-app.put("/api/tasks/:id", (req, res) => {
+app.put("/api/tasks/:id", authenticate, (req: AuthRequest, res) => {
+    const usuarioId = req.usuarioId!;
     const idParaAtualizar = parsearId(req.params.id);
     if (idParaAtualizar === null) {
         return res.status(400).json({ error: "ID inválido." });
@@ -229,14 +261,14 @@ app.put("/api/tasks/:id", (req, res) => {
 
     try {
         // Prepared statement inline (UPDATE completo não tem statement fixo no topo)
-        const sql = "UPDATE tarefas SET titulo = ?, status = ?, prioridade = ? WHERE id = ?";
-        const resultado = db.prepare(sql).run(titulo.trim(), statusValido, prioridadeValida, idParaAtualizar);
+        const sql = "UPDATE tarefas SET titulo = ?, status = ?, prioridade = ? WHERE id = ? AND usuario_id = ?";
+        const resultado = db.prepare(sql).run(titulo.trim(), statusValido, prioridadeValida, idParaAtualizar, usuarioId);
 
         if (resultado.changes === 0) {
             return res.status(404).json({ message: "Tarefa não encontrada para atualização!" });
         }
 
-        const tarefaAtualizada = stmtBuscarPorId.get(idParaAtualizar) as Tarefa;
+        const tarefaAtualizada = stmtBuscarPorId.get(idParaAtualizar, usuarioId) as Tarefa;
         return res.status(200).json(tarefaAtualizada);
     } catch {
         return res.status(500).json({ error: "Erro ao processar a atualização no banco de dados." });
@@ -244,7 +276,8 @@ app.put("/api/tasks/:id", (req, res) => {
 });
 
 // A Rota PATCH executa atualizações parciais com validações sob demanda de forma segura e atômica
-app.patch("/api/tasks/:id", (req, res) => {
+app.patch("/api/tasks/:id", authenticate, (req: AuthRequest, res) => {
+    const usuarioId = req.usuarioId!;
     const idParaAtualizar = parsearId(req.params.id);
     if (idParaAtualizar === null) {
         return res.status(400).json({ error: "ID inválido." });
@@ -259,7 +292,7 @@ app.patch("/api/tasks/:id", (req, res) => {
     try {
         const fluxoAtualizacao = db.transaction(() => {
             // Busca com statement singleton
-            const tarefaExistente = stmtBuscarPorId.get(idParaAtualizar) as Tarefa | undefined;
+            const tarefaExistente = stmtBuscarPorId.get(idParaAtualizar, usuarioId) as Tarefa | undefined;
             if (!tarefaExistente) return null;
 
             const camposParaAtualizar: string[] = [];
@@ -295,11 +328,11 @@ app.patch("/api/tasks/:id", (req, res) => {
             if (camposParaAtualizar.length === 0) return tarefaExistente;
 
             // Query dinâmica SEGURA: placeholders ? + valores array
-            const sql = `UPDATE tarefas SET ${camposParaAtualizar.join(", ")} WHERE id = ?`;
-            valoresParaAtualizar.push(idParaAtualizar);
+            const sql = `UPDATE tarefas SET ${camposParaAtualizar.join(", ")} WHERE id = ? AND usuario_id = ?`;
+            valoresParaAtualizar.push(idParaAtualizar, usuarioId);
 
             db.prepare(sql).run(...valoresParaAtualizar);
-            return stmtBuscarPorId.get(idParaAtualizar) as Tarefa;
+            return stmtBuscarPorId.get(idParaAtualizar, usuarioId) as Tarefa;
         });
 
         const resultado = fluxoAtualizacao();
