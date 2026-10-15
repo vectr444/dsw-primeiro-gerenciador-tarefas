@@ -1,46 +1,81 @@
-import { useState, useEffect } from "react";
+import { useState } from 'react';
+import type { SubmitEvent } from 'react';
+import Tarefa from './Tarefa.tsx';
+import type { TarefaItem } from './types.ts';
 
-function Saudacao() {
-  return <h1>Olá, turma! Minha primeira interface!</h1>;
-}
+function App() {
+  const [tarefas, setTarefas] = useState<TarefaItem[]>([]);
+  const [novoTitulo, setNovoTitulo] = useState('');
 
-export default function App() {
-  const [n, setN] = useState(0);
-  const [mensagem, setMensagem] = useState("Carregando...");
 
-  // Simulando tarefas que virão do Back-end
-  const [tarefas] = useState([
-    { id: 1, titulo: "Configurar Vite e React" },
-    { id: 2, titulo: "Entender useState e useEffect" },
-    { id: 3, titulo: "Renderizar lista com map()" },
-  ]);
+  function adicionarTarefa(evento: SubmitEvent<HTMLFormElement>) {
+    evento.preventDefault();
 
-  useEffect(() => {
-    fetch("http://localhost:3000/api/health")
-      .then((res) => res.json())
-      .then((data) => {
-        console.log("Dados recebidos do back-end:", data);
-        setMensagem("Conexão estabelecida com sucesso!");
-      })
-      .catch(() => setMensagem("Erro ao conectar com o servidor"));
-  }, []);
+    const tituloLimpo = novoTitulo.trim();
+
+    if (tituloLimpo === '') {
+      return;
+    }
+
+    const novaTarefa: TarefaItem = {
+      id: Date.now(),
+      titulo: tituloLimpo,
+      concluida: false
+    };
+
+    setTarefas(listaAtual => [...listaAtual, novaTarefa]);
+    setNovoTitulo('');
+
+  }
+
+  function alternarConclusao(id: number) {
+    setTarefas(listaAtual => listaAtual.map(tarefa =>
+      tarefa.id === id ? { ...tarefa, concluida: !tarefa.concluida } : tarefa
+    ));
+  }
+
+  function removerTarefa(id: number) {
+    setTarefas(listaAtual => listaAtual.filter(tarefa => tarefa.id !== id));
+  }
+
+  const totalPendentes = tarefas.filter(tarefa => !tarefa.concluida).length;
+  const totalConcluidas = tarefas.filter(tarefa => tarefa.concluida).length;
 
   return (
-    <div>
-      <Saudacao />
-      <hr />
-      <h2>Contador interativo</h2>
-      <button onClick={() => setN(n + 1)}>Cliquei {n} vezes</button>
-      <hr />
-      <h2>Status do Servidor</h2>
-      <p>{mensagem}</p>
-      <hr />
-      <h2>Minhas Tarefas</h2>
+    <>
+    <main>
+      <h1>Minha Lista de Tarefas</h1>
+      <p>Organiza suas atividades do dia</p>
+
+      <form onSubmit={adicionarTarefa}>
+        <label htmlFor="titulo">Nova Tarefa:</label>
+        <input
+          type="text"
+          id="titulo"
+          value={novoTitulo}
+          onChange={(e) => setNovoTitulo(e.target.value)}
+          placeholder='Ex.: Estudar React'
+        />
+        <button type="submit">Adicionar</button>
+      </form>
+ 
       <ul>
         {tarefas.map((tarefa) => (
-          <li key={tarefa.id}>{tarefa.titulo}</li>
+          <Tarefa
+            key={tarefa.id}
+            tarefa={tarefa}
+            onAlternar={alternarConclusao}
+            onRemover={removerTarefa}
+          />
         ))}
       </ul>
-    </div>
+
+      <p>Total de Tarefas: {tarefas.length}</p>
+      <p>Total de Tarefas Pendentes: {totalPendentes}</p>
+      <p>Total de Tarefas Concluídas: {totalConcluidas}</p>
+    </main>
+    </>
   );
 }
+
+export default App;
