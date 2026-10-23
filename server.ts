@@ -119,7 +119,9 @@ const stmtBuscarUsuarioPorEmail = db.prepare("SELECT * FROM usuarios WHERE email
 const usuariosExistentes = stmtContarUsuarios.get() as { count: number };
 if (usuariosExistentes.count === 0) {
     // Bom: Usamos a busca ja preparada e passamos os dados de forma parametrizada
-    stmtInserirUsuario.run("admin@senai.com", "senha_super_secreta_123");
+    // A senha precisa passar pelo bcrypt: o /login compara com compareSync,
+    // e um hash nunca e igual a um texto puro (senao o admin nunca conseguiria entrar).
+    stmtInserirUsuario.run("admin@senai.com", bcrypt.hashSync("senha_super_secreta_123", 10));
 }
 
 console.log("Banco de dados SQLite inicializado com sucesso!");
@@ -137,7 +139,8 @@ app.get("/api/version", (req, res) => {
 
 // Rota de Registro
 app.post("/api/auth/register", (req, res) => {
-    const { email, senha } = req.body;
+    // Sem o header Content-Type: application/json, req.body chega undefined
+    const { email, senha } = req.body ?? {};
     // Validação inicial dos dados
     if (typeof email !== "string" || typeof senha !== "string") {
         return res.status(400).json({ error: "E-mail e senha são obrigatórios." });
@@ -158,7 +161,7 @@ app.post("/api/auth/register", (req, res) => {
 
 // Rota de Login
 app.post("/api/auth/login", (req, res) => {
-    const { email, senha } = req.body;
+    const { email, senha } = req.body ?? {};
     if (typeof email !== "string" || typeof senha !== "string") {
         return res.status(400).json({ error: "E-mail e senha são obrigatórios." });
     }
