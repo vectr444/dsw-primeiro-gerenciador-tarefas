@@ -1,75 +1,31 @@
-# React + TypeScript + Vite
+# Front-end — Gerenciador de Tarefas
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+Aplicação React (Vite + TypeScript + Tailwind CSS v4) que consome a API do back-end que fica na raiz do repositório. A documentação geral do projeto está no [README da raiz](../README.md).
 
-Currently, two official plugins are available:
+## Executar
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+Com o back-end rodando em `http://localhost:3000`:
 
-## React Compiler
-
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
-
-## Expanding the ESLint configuration
-
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
-
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
-
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
-
+```bash
+npm install
+npm run dev
 ```
 
-You can also install [eslint-plugin-react-x](https://npmx.dev/package/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://npmx.dev/package/eslint-plugin-react-dom) for React-specific lint rules:
+## Scripts
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
+| Comando | O que faz |
+| --- | --- |
+| `npm run dev` | Servidor de desenvolvimento do Vite (porta 5173) |
+| `npm run lint` | Roda o ESLint |
+| `npm run build` | Confere os tipos (`tsc`) e gera o build em `dist/` |
+| `npm run preview` | Serve o build de produção localmente |
 
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+## Arquivos principais (`src/`)
 
-```
+| Arquivo | Papel |
+| --- | --- |
+| `api.ts` | Único lugar que conhece o endereço da API: guarda o token, trata erros e expõe login, registro e CRUD |
+| `Login.tsx` | Tela de login e registro (um componente, dois modos) |
+| `Tarefas.tsx` | Lista de tarefas: criar, concluir, excluir com confirmação e buscar com debounce |
+| `App.tsx` | Decide entre `Login` e `Tarefas` conforme o usuário logado e é o dono da sessão |
+| `index.css` | Liga o Tailwind e define o tema escuro |

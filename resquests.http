@@ -1,115 +1,354 @@
+# ============================================================================
+# Gerenciador de Tarefas - Testes da API com o REST Client
+# ============================================================================
+# COMO USAR
+# 1. Instale a extensão "REST Client" (humao.rest-client) no VS Code.
+# 2. Suba o back-end em OUTRO terminal: npm run dev
+# 3. Clique em "Send Request" acima da requisição que quiser testar.
+#
+# O token do login é capturado AUTOMATICAMENTE (veja o item 2.5): você não
+# precisa copiar e colar nada.
+#
+# COMO LER O ARQUIVO
+# - Linhas começando com "#" são comentários.
+# - Linhas começando com "###" iniciam uma requisição nova.
+# - O texto depois de "->" é o status HTTP esperado naquele teste.
+# ============================================================================
+
 @baseUrl = http://localhost:3000
 
+# ----------------------------------------------------------------------------
+# 1. SERVIÇO NO AR
+# ----------------------------------------------------------------------------
 
-### Servidor no ar???
+### 1.1 Health Check -> 200
 GET {{baseUrl}}/api/health
 
-
-### Versão do gerenciador de tarefas
+### 1.2 Versão da aplicação -> 200
 GET {{baseUrl}}/api/version
 
+# ----------------------------------------------------------------------------
+# 2. AUTENTICAÇÃO (o tema da Aula 06)
+# ----------------------------------------------------------------------------
 
-### Aula 04: as rotas /api/tasks agora exigem token JWT.
-### Faça login (teste 38), copie o token e cole na variável abaixo (sem aspas).
-@token = COLE_SEU_TOKEN_AQUI
-
-### 3. (Protegido) Listar todas as tarefas do usuário logado
-GET {{baseUrl}}/api/tasks
-Authorization: Bearer {{token}}
-
-### 3B. Teste de Segurança: Acessar sem token (deve retornar 401)
-GET {{baseUrl}}/api/tasks
-
-### 5. (Protegido) Criar uma nova tarefa
-POST {{baseUrl}}/api/tasks
+### 2.1 Registrar um novo usuário -> 201
+# Rode uma vez. Se repetir, verá o erro 409 do item 2.4 -- é o esperado.
+POST {{baseUrl}}/api/auth/register
 Content-Type: application/json
-Authorization: Bearer {{token}}
 
 {
-    "titulo": "Minha Tarefa Isolada",
-    "prioridade": "high"
+  "email": "aluno@senai.com",
+  "senha": "minhaSenhaSegura123"
 }
 
-### 31. Teste de Array Injection (A Busca Bizarra)
-# Sem protecao: O JS converte ['a', 'b'] em "a,b" e faz uma busca descontrolada que nao acha nada.
-# Com protecao (Passo 4): O servidor percebe que nao e uma string pura, barra o array e lista as tarefas intencionalmente.
+### 2.2 Registrar com senha curta -> 400
+# O back-end exige no mínimo 6 caracteres.
+POST {{baseUrl}}/api/auth/register
+Content-Type: application/json
+
+{
+  "email": "curto@senai.com",
+  "senha": "123"
+}
+
+### 2.3 Registrar sem o campo senha -> 400
+POST {{baseUrl}}/api/auth/register
+Content-Type: application/json
+
+{
+  "email": "soberem@example.com"
+}
+
+### 2.4 Registrar e-mail repetido -> 409
+# Precisa ter rodado o 2.1 antes. A coluna email é UNIQUE no banco.
+POST {{baseUrl}}/api/auth/register
+Content-Type: application/json
+
+{
+  "email": "aluno@senai.com",
+  "senha": "outrasenha456"
+}
+
+### 2.5 LOGIN com sucesso -> 200 (devolve o token JWT)
+# Este é o teste mais importante da aula.
+# O bloco abaixo guarda o token na variável "token", usada por todas as
+# rotas protegidas daqui para baixo. Rode este antes dos itens 2.9 e 3.x.
+POST {{baseUrl}}/api/auth/login
+Content-Type: application/json
+
+{
+  "email": "aluno@senai.com",
+  "senha": "minhaSenhaSegura123"
+}
+
+> {%
+  client.global.set("token", response.body.token);
+%}
+
+### 2.6 LOGIN com senha errada -> 401
+# A resposta é a mesma exista ou não o e-mail. Isso evita que um invasor
+# descubra quais contas existem.
+POST {{baseUrl}}/api/auth/login
+Content-Type: application/json
+
+{
+  "email": "aluno@senai.com",
+  "senha": "senhaErrada"
+}
+
+### 2.7 Rota protegida SEM token -> 401
+# Prova que o back-end exige autenticação de verdade.
+GET {{baseUrl}}/api/tasks
+
+### 2.8 Rota protegida com token FORJADO -> 401
+# O servidor confere a assinatura e rejeita.
+GET {{baseUrl}}/api/tasks
+Authorization: Bearer token.falso.assinatura
+
+### 2.9 Rota protegida COM o token do 2.5 -> 200
+# Compare com o 2.7: é a mesma rota, agora devolvendo 200.
+GET {{baseUrl}}/api/tasks
+Authorization: Bearer {{token}}
+
+### 2.10 Login sem corpo nenhum -> 400
+# Uma requisição sem corpo (ou sem o header Content-Type) não pode
+# derrubar o servidor: o back-end responde 400, e não 500.
+POST {{baseUrl}}/api/auth/login
+Content-Type: application/json
+
+# ----------------------------------------------------------------------------
+# 3. TAREFAS -- CRUD (todas exigem o token do item 2.5)
+# ----------------------------------------------------------------------------
+
+### 3.1 Criar tarefa -> 201
+# Guarda o id da tarefa criada; os itens 3.7 a 3.13 reutilizam esse id,
+# por isso não precisamos chutar um número no caminho da URL.
+POST {{baseUrl}}/api/tasks
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "titulo": "Estudar TypeScript",
+  "prioridade": "high"
+}
+
+> {%
+  client.global.set("taskId", response.body.id);
+%}
+
+### 3.2 Criar tarefa sem título válido -> 400
+# O título precisa ter ao menos 3 caracteres úteis.
+POST {{baseUrl}}/api/tasks
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "titulo": " ",
+  "prioridade": "high"
+}
+
+### 3.3 Criar tarefa com prioridade desconhecida -> 201
+# A prioridade é normalizada para "medium" -- não dá erro.
+POST {{baseUrl}}/api/tasks
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "titulo": "Ler livro de Node.js",
+  "prioridade": "muito_urgente"
+}
+
+### 3.4 Listar todas as tarefas -> 200
+GET {{baseUrl}}/api/tasks
+Authorization: Bearer {{token}}
+
+### 3.5 Buscar por título -> 200
+GET {{baseUrl}}/api/tasks?search=TypeScript
+Authorization: Bearer {{token}}
+
+### 3.6 Busca que não encontra nada -> 200 (lista vazia)
+GET {{baseUrl}}/api/tasks?search=naoexistenada
+Authorization: Bearer {{token}}
+
+### 3.7 Atualização parcial (PATCH) -- só o status -> 200
+PATCH {{baseUrl}}/api/tasks/{{taskId}}
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "status": "completed"
+}
+
+### 3.8 Atualização parcial com valor inválido -> 400
+PATCH {{baseUrl}}/api/tasks/{{taskId}}
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "status": "cancelled"
+}
+
+### 3.9 Atualização completa (PUT) -> 200
+PUT {{baseUrl}}/api/tasks/{{taskId}}
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "titulo": "Estudar TypeScript Avançado",
+  "prioridade": "high",
+  "status": "pending"
+}
+
+### 3.10 PUT em tarefa inexistente -> 404
+PUT {{baseUrl}}/api/tasks/999999
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "titulo": "Tarefa inexistente",
+  "prioridade": "medium",
+  "status": "pending"
+}
+
+### 3.11 ID inválido (não numérico) -> 400
+PUT {{baseUrl}}/api/tasks/abc
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "titulo": "Título válido",
+  "prioridade": "medium",
+  "status": "pending"
+}
+
+### 3.12 Excluir a tarefa criada no 3.1 -> 200
+DELETE {{baseUrl}}/api/tasks/{{taskId}}
+Authorization: Bearer {{token}}
+
+### 3.13 Excluir de novo (já não existe) -> 404
+DELETE {{baseUrl}}/api/tasks/{{taskId}}
+Authorization: Bearer {{token}}
+
+# ----------------------------------------------------------------------------
+# 4. TESTES DE SEGURANÇA
+# Mostram as proteções construídas nas aulas anteriores.
+# ----------------------------------------------------------------------------
+
+### 4.1 Injeção de SQL na busca -> 200 (não acontece nada; o banco está a salvo)
+# O "?" do prepared statement trata tudo como texto literal.
+# O que o servidor decodifica é: %'; DROP TABLE tarefas; --
+GET {{baseUrl}}/api/tasks?search=%25%27%3B%20DROP%20TABLE%20tarefas%3B%20--
+Authorization: Bearer {{token}}
+
+### 4.2 Busca com "%" (curinga do LIKE) -> 200
+GET {{baseUrl}}/api/tasks?search=%25
+Authorization: Bearer {{token}}
+
+### 4.3 Parâmetros repetidos (vira array) -> 200
+# O back-end detecta que não é uma string e força a busca vazia.
 GET {{baseUrl}}/api/tasks?search=a&search=b
 Authorization: Bearer {{token}}
 
-### 32. Teste de Parametro Indefinido (O Acidente)
-# Sem protecao: A variavel search fica undefined, o codigo se perde e lista tudo por acidente.
-# Com protecao (Passo 4): O servidor barra o dado ruim, forca uma string vazia ("") e lista tudo de proposito e com seguranca.
-GET {{baseUrl}}/api/tasks?search[]=a&search[]=b
-Authorization: Bearer {{token}}
-
-### 33. Quebrando o Type Guard: Titulo numerico (deve retornar 400)
-# O invasor tenta mandar um numero (123) no lugar de uma string.
-# A nossa funcao tituloValido() vai barrar isso gracas a verificacao typeof t === "string".
+### 4.4 Quebrando o type guard: título numérico -> 400
+# A função tituloValido() barra qualquer coisa que não seja string.
 POST {{baseUrl}}/api/tasks
-Content-Type: application/json
 Authorization: Bearer {{token}}
+Content-Type: application/json
 
 {
-    "titulo": 123,
-    "prioridade": "high"
+  "titulo": 123,
+  "prioridade": "high"
 }
 
-### 34. Quebrando a Allowlist: Status nao permitido (deve retornar 400)
-# O invasor tenta inventar um status que nao existe no banco ("cancelled").
-# Nossa rota PATCH verifica a lista STATUS_VALIDOS e barra a acao antes mesmo de abrir a transacao no banco.
-PATCH {{baseUrl}}/api/tasks/1
-Content-Type: application/json
+### 4.5 Criar tarefa para o teste de allowlist -> 201
+# Este teste precisa de uma tarefa que EXISTA: o PATCH confere a
+# existência antes de olhar o status, então em tarefa apagada a resposta
+# seria 404, e não o 400 que queremos observar.
+POST {{baseUrl}}/api/tasks
 Authorization: Bearer {{token}}
-
-{
-    "status": "cancelled"
-}
-
-### Testes de Autenticação
-
-### 35. Registro com Sucesso (deve retornar 201)
-POST {{baseUrl}}/api/auth/register
 Content-Type: application/json
 
 {
-    "email": "aluno@senai.com",
-    "senha": "minhaSenhaSegura123"
+  "titulo": "Tarefa para testar a allowlist",
+  "prioridade": "medium"
 }
 
-### 36. Quebrando a Validação: Senha muito curta (deve retornar 400)
-POST {{baseUrl}}/api/auth/register
+> {%
+  client.global.set("taskAllowlist", response.body.id);
+%}
+
+### 4.6 Quebrando a allowlist: status inexistente -> 400
+# A lista STATUS_VALIDOS barra o valor antes de chegar ao banco.
+PATCH {{baseUrl}}/api/tasks/{{taskAllowlist}}
+Authorization: Bearer {{token}}
 Content-Type: application/json
 
 {
-    "email": "teste@senai.com",
-    "senha": "123"
+  "status": "hackeado"
 }
 
-### 37. Testando a Duplicidade: E-mail já cadastrado (deve retornar 409)
-# Execute o teste 35 novamente e depois este aqui. O banco deve barrar!
-POST {{baseUrl}}/api/auth/register
+### 4.7 Quebrando a allowlist: prioridade inexistente -> 400
+PATCH {{baseUrl}}/api/tasks/{{taskAllowlist}}
+Authorization: Bearer {{token}}
 Content-Type: application/json
 
 {
-    "email": "aluno@senai.com",
-    "senha": "outrasenha456"
+  "prioridade": "urgentissima"
 }
 
-### 38. Login com Sucesso (deve retornar o Token JWT)
-# Guarde o "token" gerado na resposta, vamos usá-lo na próxima aula!
+# ----------------------------------------------------------------------------
+# 5. ISOLAMENTO ENTRE USUÁRIOS
+# A propriedade de segurança mais importante do projeto: cada usuário só
+# enxerga e só mexe nas PRÓPRIAS tarefas, mesmo sabendo o id alheio.
+# Precisa ter rodado o 2.1 (aluno criado) e o 2.5 (token do aluno).
+# ----------------------------------------------------------------------------
+
+### 5.1 Login como admin (conta que já vem no banco) -> 200
 POST {{baseUrl}}/api/auth/login
 Content-Type: application/json
 
 {
-    "email": "aluno@senai.com",
-    "senha": "minhaSenhaSegura123"
+  "email": "admin@senai.com",
+  "senha": "senha_super_secreta_123"
 }
 
-### 39. Login com Senha Incorreta (deve retornar 401)
-POST {{baseUrl}}/api/auth/login
+> {%
+  client.global.set("tokenAdmin", response.body.token);
+%}
+
+### 5.2 O admin cria uma tarefa para ele -> 201
+POST {{baseUrl}}/api/tasks
+Authorization: Bearer {{tokenAdmin}}
 Content-Type: application/json
 
 {
-    "email": "aluno@senai.com",
-    "senha": "senhaerrada"
+  "titulo": "Tarefa privada do admin",
+  "prioridade": "high"
 }
+
+> {%
+  client.global.set("taskDoAdmin", response.body.id);
+%}
+
+### 5.3 A lista do aluno NÃO traz a tarefa do admin -> 200
+# Confira no corpo da resposta: "Tarefa privada do admin" não pode aparecer.
+GET {{baseUrl}}/api/tasks
+Authorization: Bearer {{token}}
+
+### 5.4 O aluno tenta EDITAR a tarefa do admin -> 404
+# O aluno sabe o id, mas o "AND usuario_id = ?" do banco barra a alteração.
+PATCH {{baseUrl}}/api/tasks/{{taskDoAdmin}}
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "status": "completed"
+}
+
+### 5.5 O aluno tenta APAGAR a tarefa do admin -> 404
+DELETE {{baseUrl}}/api/tasks/{{taskDoAdmin}}
+Authorization: Bearer {{token}}
+
+### 5.6 O admin confirma que a tarefa dele ficou intacta -> 200
+GET {{baseUrl}}/api/tasks
+Authorization: Bearer {{tokenAdmin}}
