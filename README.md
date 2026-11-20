@@ -122,4 +122,3 @@ Cada aula tem seu registro na pasta [`diario/`](diario/):
 | 08 | 28/10/2026 | Servindo o front pelo back (static e SPA fallback) | [08_servindo_front.md](diario/08_servindo_front.md) |
 | 09 | 04/11/2026 | Banco de dados em nuvem (Turso e libSQL) | [09_banco_nuvem.md](diario/09_banco_nuvem.md) |
 | 10 | 11/11/2026 | Deploy no Render | [10_deploy_render.md](diario/10_deploy_render.md) |
-| — | 18/11/2026 | Atividade: leitura, análise e evolução (filtro por prioridade) | [18-11-2026.md](diario/18-11-2026.md) |
