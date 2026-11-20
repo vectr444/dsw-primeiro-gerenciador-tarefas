@@ -17,8 +17,21 @@
 // 1. Endereço da API e tipos de dados
 // ---------------------------------------------------------------------------
 
-// Endereço do back-end. Em produção isso vira uma variável de ambiente.
-const API_BASE = "http://localhost:3000";
+// Endereço da API -- e o detalhe mais importante da Aula 08.
+//
+// Em desenvolvimento, o Vite serve a tela em http://localhost:5173 enquanto a
+// API vive em http://localhost:3000. São duas origens diferentes, então o
+// endereço precisa ser completo.
+//
+// Depois do `npm run build`, é o próprio server.ts que entrega a tela. A página
+// e a API passam a vir da MESMA origem, e aí um caminho relativo basta: o ""
+// abaixo faz o fetch pedir "/api/tasks", e o navegador completa com o endereço
+// da barra. Assim o MESMO build roda em qualquer máquina, em qualquer porta (e
+// no Render), sem recompilar nada.
+//
+// O Vite troca import.meta.env.DEV por true ou false na hora do build, então o
+// "localhost:3000" nem chega ao JavaScript final.
+const API_BASE = import.meta.env.DEV ? "http://localhost:3000" : "";
 
 // Chave usada no localStorage para guardar o token. Com um prefixo nosso,
 // para não colidir com nada de outro projeto na mesma máquina.
@@ -111,6 +124,11 @@ const tratarResposta = async <T,>(res: Response): Promise<T> => {
       (dados as { error?: string } | null)?.error ??
       `Falha na requisição (HTTP ${res.status}).`;
     throw new Error(mensagem);
+  }
+
+  // 204 No Content (ou corpo vazio): não há dado nenhum para devolver.
+  if (res.status === 204 || texto === "") {
+    return undefined as T;
   }
 
   return dados as T;

@@ -352,3 +352,42 @@ Authorization: Bearer {{token}}
 ### 5.6 O admin confirma que a tarefa dele ficou intacta -> 200
 GET {{baseUrl}}/api/tasks
 Authorization: Bearer {{tokenAdmin}}
+
+# ----------------------------------------------------------------------------
+# 6. FRONT SERVIDO PELO BACK (Aula 08)
+# Antes de testar: npm run build:web  (gera web/dist) e npm run dev.
+# Aqui NÃO basta conferir o status: confira também o Content-Type!
+# ----------------------------------------------------------------------------
+
+### 6.1 GET / entrega a tela -> 200 text/html, com <div id="root">
+GET {{baseUrl}}/
+
+### 6.2 GET /tarefas é rota do React (SPA fallback) -> 200 text/html
+GET {{baseUrl}}/tarefas
+
+### 6.3 GET /favicon.svg é arquivo do build -> 200 image/svg+xml (NÃO text/html)
+GET {{baseUrl}}/favicon.svg
+
+### 6.4 GET /api/typo não existe na API -> 404 application/json (NÃO 200, NÃO HTML)
+GET {{baseUrl}}/api/typo
+
+### 6.5 GET /apixyz começa com "api" mas NÃO é /api -> 200 text/html
+GET {{baseUrl}}/apixyz
+
+### 6.6 GET /api/health -- a API sobreviveu ao front -> 200
+GET {{baseUrl}}/api/health
+
+# ----------------------------------------------------------------------------
+# 7. BANCO NA NUVEM E DEPLOY (Aulas 09 e 10)
+# Para testar o app publicado no Render, troque o @baseUrl lá em cima por
+# https://seu-app.onrender.com
+# ----------------------------------------------------------------------------
+
+### 7.1 Health Check de verdade (faz SELECT 1 no banco) -> 200
+# O campo "banco" mostra onde os dados estão:
+#   "arquivo local (SQLite)"  ou  "Turso / libSQL (nuvem)"
+GET {{baseUrl}}/api/health
+
+### 7.2 Diagnóstico do banco -> 200 { ok: true, tabelas: [...], contagem: {...} }
+# Se o banco estiver fora do ar, a resposta é 503 com ok: false.
+GET {{baseUrl}}/api/db-check

@@ -4,30 +4,34 @@ Projeto da disciplina **Desenvolvimento de Sistemas Web** (Prof. Alexandre Bendl
 
 * **Estudante:** Juan Carlos
 
-Um gerenciador de tarefas completo e **multi-usuário**: cada pessoa cria a sua conta, entra com e-mail e senha e enxerga e altera **somente as próprias tarefas**. Os dados ficam em um banco SQLite.
+Um gerenciador de tarefas completo e **multi-usuário**: cada pessoa cria a sua conta, entra com e-mail e senha e enxerga e altera **somente as próprias tarefas**. Os dados ficam em um banco SQLite: um arquivo local (`tarefas.db`) em desenvolvimento ou o **Turso** (SQLite na nuvem) quando as credenciais estão no `.env`. O back-end também entrega o front já compilado, então em produção tudo roda em um único endereço (pronto para o deploy no Render).
 
 ## Funcionalidades
 
-* Registro e login de usuários, com senha protegida por hash (bcrypt) e sessão por token JWT (validade de 2 horas).
+* Registro e login de usuários, com senha protegida por hash (bcrypt) e sessão por token JWT (validade de 8 horas).
 * CRUD de tarefas: criar, listar, concluir/reabrir e excluir (com confirmação em modal).
-* Prioridade por tarefa (Baixa, Média, Alta) e busca por título com *debounce*.
+* Prioridade por tarefa (Baixa, Média, Alta), busca por título com *debounce* e filtro por prioridade na tela.
 * Isolamento entre usuários: toda consulta ao banco filtra pelo `usuario_id` do token.
-* Back-end blindado contra SQL Injection (prepared statements) e com validação centralizada da entrada.
+* Back-end blindado contra SQL Injection (consultas parametrizadas) e com validação centralizada da entrada.
+* Banco local ou em nuvem sem mudar o código, e criação/atualização automática das tabelas na subida do servidor.
 
 ## Tecnologias
 
 | Camada | Tecnologias |
 | --- | --- |
-| Back-end | Node.js, Express 5, TypeScript, better-sqlite3 (SQLite), bcryptjs, jsonwebtoken, cors |
+| Back-end | Node.js (20.12+), Express 5, TypeScript, @libsql/client (SQLite local ou Turso), bcryptjs, jsonwebtoken, cors |
 | Front-end | React 19, TypeScript, Vite, Tailwind CSS v4, ESLint |
+| Deploy | Render (`render.yaml`) + Turso |
 
 ## Estrutura do repositório
 
 ```
 .
-├── server.ts            # API (Express + SQLite + JWT)
+├── server.ts            # API (Express + libSQL + JWT) e entrega do front compilado
 ├── resquests.http       # Testes da API (extensão REST Client do VS Code)
 ├── package.json         # Dependências e scripts do back-end
+├── render.yaml          # Configuração do serviço no Render
+├── .env.example         # Modelo das variáveis de ambiente (o .env real não vai para o Git)
 ├── diario/              # Diários de aprendizagem de cada aula (.md)
 └── web/                 # Front-end React (Vite + TypeScript)
     └── src/
@@ -39,36 +43,47 @@ Um gerenciador de tarefas completo e **multi-usuário**: cada pessoa cria a sua 
 
 ## Como executar
 
-Pré-requisito: [Node.js](https://nodejs.org/) instalado. São necessários **dois terminais**.
-
-**Terminal 1 — back-end** (na raiz do projeto):
+Pré-requisito: [Node.js](https://nodejs.org/) 20.12 ou superior. Primeiro instale as dependências das duas pastas:
 
 ```bash
 npm install
-npm run dev
+cd web && npm install && cd ..
 ```
 
-A API sobe em `http://localhost:3000`. Na primeira execução o arquivo `tarefas.db` é criado automaticamente, já com o usuário `admin@senai.com` (senha `senha_super_secreta_123`).
+Na primeira execução o servidor cria as tabelas sozinho, já com o usuário `admin@senai.com` (senha `senha_super_secreta_123`). Um `tarefas.db` criado pelas aulas anteriores é atualizado automaticamente, sem perder os dados.
 
-**Terminal 2 — front-end** (dentro de `web/`):
+### Modo 1 — desenvolvimento (2 terminais, recarrega ao salvar)
+
+| Terminal | Comando (na raiz) | O que sobe |
+| --- | --- | --- |
+| 1 | `npm run dev` | Back-end em `http://localhost:3000` |
+| 2 | `npm run dev:web` | Front (Vite) em `http://localhost:5173` — abra este endereço |
+
+### Modo 2 — servido pelo back (1 endereço, como em produção)
 
 ```bash
-cd web
-npm install
-npm run dev
+npm run build:web   # gera web/dist/
+npm run dev         # ou: npm start
 ```
 
-Abra o endereço que o Vite mostrar (em geral `http://localhost:5173`).
+Abra `http://localhost:3000`: o próprio Express entrega a tela e a API. Se o build estiver ausente ou velho, o servidor avisa no terminal. Depois de mudar algo em `web/src`, rode `npm run build:web` de novo.
 
-> Se o `tarefas.db` foi criado por uma versão antiga do `server.ts`, apague-o e reinicie o back-end para ele ser recriado.
+### Banco de dados: local ou Turso (nuvem)
+
+Sem `.env`, o servidor usa o arquivo local `tarefas.db`. Para usar o Turso, copie `.env.example` para `.env` e preencha `TURSO_URL` e `TURSO_TOKEN` (salve em UTF-8 **sem BOM**). O terminal mostra o modo em uso ao subir, e `GET /api/health` informa o campo `banco`.
 
 ### Outros comandos
 
 | Onde | Comando | O que faz |
 | --- | --- | --- |
-| raiz | `npm run build` | Confere os tipos do back-end com o TypeScript |
+| raiz | `npm run build` | Build completo: instala `web/`, gera `web/dist/` e confere os tipos do back-end (é o que o Render roda) |
+| raiz | `npm start` | Sobe o servidor (API + front compilado) |
 | `web/` | `npm run lint` | Roda o ESLint |
-| `web/` | `npm run build` | Confere os tipos e gera o build de produção em `web/dist/` |
+| `web/` | `npm run build` | Confere os tipos e gera só o build do front em `web/dist/` |
+
+### Deploy no Render
+
+O `render.yaml` descreve o serviço. No Render: **New + > Web Service**, conecte o repositório e defina as variáveis `TURSO_URL` e `TURSO_TOKEN` (o `JWT_SECRET` é gerado automaticamente). Depois confira `/api/health` e `/api/db-check` na URL pública.
 
 ## API
 
@@ -76,8 +91,9 @@ As rotas de tarefas exigem o header `Authorization: Bearer <token>`.
 
 | Método | Rota | Descrição |
 | --- | --- | --- |
-| GET | `/api/health` | Verifica se o servidor está no ar |
+| GET | `/api/health` | Verifica se o servidor e o banco estão no ar (informa o modo do banco) |
 | GET | `/api/version` | Nome e versão da aplicação |
+| GET | `/api/db-check` | Diagnóstico: tabelas existentes e quantidade de linhas de cada uma |
 | POST | `/api/auth/register` | Cria uma conta (`email`, `senha` com 6+ caracteres) |
 | POST | `/api/auth/login` | Devolve o token JWT |
 | GET | `/api/tasks?search=` | Lista as tarefas do usuário, com busca opcional por título |
@@ -103,3 +119,7 @@ Cada aula tem seu registro na pasta [`diario/`](diario/):
 | 06 | 14/10/2026 | Tela de login e registro no React | [06_tela_login.md](diario/06_tela_login.md) |
 | 06 (em sala) | 14/10/2026 | Tipando o front React com TypeScript | [14-10-2026.md](diario/14-10-2026.md) |
 | 07 | 21/10/2026 | CRUD de tarefas no React | [07_crud_tarefas.md](diario/07_crud_tarefas.md) |
+| 08 | 28/10/2026 | Servindo o front pelo back (static e SPA fallback) | [08_servindo_front.md](diario/08_servindo_front.md) |
+| 09 | 04/11/2026 | Banco de dados em nuvem (Turso e libSQL) | [09_banco_nuvem.md](diario/09_banco_nuvem.md) |
+| 10 | 11/11/2026 | Deploy no Render | [10_deploy_render.md](diario/10_deploy_render.md) |
+| — | 18/11/2026 | Atividade: leitura, análise e evolução (filtro por prioridade) | [18-11-2026.md](diario/18-11-2026.md) |
