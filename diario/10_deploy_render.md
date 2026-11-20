@@ -18,11 +18,14 @@ Respostas ao "Diário de Bordo" (itens que dependem só de teoria):
 4. Para que serve "/api/db-check"? Confirma que o banco responde, que as tabelas "usuarios" e "tarefas" existem e quantas linhas têm.
 5. Por que "npm run build" local antes do "git push"? Se quebrar na minha máquina, quebra no Render. É o teste mais barato.
 
+6. O que aconteceu ao apertar F5 em "/tarefas" na URL pública? Carregou direto, sem 404, e continuei logado. Era o esperado: o Express devolve o "index.html" (SPA fallback) e o React desenha a tela certa pela URL.
+7. Encontrei algum erro? Sim, e foi o primeiro: logo depois de criar o Web Service, só o "/api/health" respondia, e "/", "/tarefas" e "/api/db-check" davam "Cannot GET". Veja abaixo.
+
 ## 🧩 Principal dificuldade
-(preencher depois do deploy)
+O primeiro deploy rodava o código antigo: eu tinha criado as contas e o serviço no Render, mas as mudanças das aulas 08 a 10 ainda não estavam commitadas nem enviadas ao GitHub. O Render clona o repositório, então ele só conhece o que está lá. Por isso só existiam as rotas da versão antiga (health e version), sem a rota "/api/db-check" e sem entregar a tela.
 
 ## 🔧 Como eu resolvi
-(preencher depois do deploy)
+Fiz o commit e o "git push" para a "main", e o "autoDeploy" do Render publicou a versão nova. Depois conferi a URL pública: "/api/health" respondeu com "banco": "Turso / libSQL (nuvem)", o "/api/db-check" listou as tabelas "usuarios" e "tarefas", "/" e "/tarefas" abriram a tela do React, e "/api/typo" respondeu 404 em JSON. No navegador fiz login, criei uma tarefa e recarreguei a página, e a tarefa continuou lá, gravada no Turso.
 
 ## 💡 Observações (opcional)
-Pendente, depende de mim: criar o Web Service no Render, preencher "TURSO_URL" e "TURSO_TOKEN", testar "/api/health" e "/api/db-check" e apertar F5 em "/tarefas" na URL pública (itens 6 e 7 do Diário de Bordo). "npm run build" passa localmente. A rota "/api/db-check" não exige login; ela só mostra nomes de tabelas e quantidades, mas vale pensar em protegê-la ou removê-la depois da aula.
+
